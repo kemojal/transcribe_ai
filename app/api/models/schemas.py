@@ -40,6 +40,11 @@ class UserBase(BaseModel):
     class Config:
         orm_mode = True
 
+
+class DeleteAccount(BaseModel):
+    password: str
+
+
 # Project and file schemas
 class TranscriptionResponse(BaseModel):
     id: int

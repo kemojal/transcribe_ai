@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..models.schemas import UserCreate
-from app.api.crud import provider_crud, card_crud
+from app.api.crud import provider_crud, card_crud, user_crud
 # from ..models.users import User as UserSchema, UserCreate, UserUpdate, UserRegisterSchema, UserLoginSchema
 from ...db.database import get_db
 from app.db.models import User
 # from app.api.models.users import UserResponse
-from app.api.models.schemas import UserResponse, UserLoginSchema, UserUpdate, ConnectedProviders, Message, ProviderDisconnect, ProviderConnect, CardCreate, CardUpdate, CardList, Card, CardCreate, CardUpdate
+from app.api.models.schemas import UserResponse, UserLoginSchema, UserUpdate, ConnectedProviders, Message, ProviderDisconnect, ProviderConnect, CardCreate, CardUpdate, CardList, Card, CardCreate, CardUpdate, DeleteAccount
 from ...utils.security import get_password_hash, verify_password, get_current_user, create_access_token, create_refresh_token, verify_refresh_token, validate_token
 
 router = APIRouter(
@@ -64,6 +64,16 @@ def login_user(user_credentials: UserLoginSchema, db: Session = Depends(get_db))
 def get_me(current_user: UserResponse = Depends(get_current_user)):
     return current_user
 
+
+@router.post("/delete-account", response_model=Message)
+def delete_account(
+    delete_data: DeleteAccount,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if user_crud.delete_user_account(db, current_user.id, delete_data.password):
+        return {"message": "Account successfully deleted"}
+    raise HTTPException(status_code=400, detail="Invalid password or account deletion failed")
 
 @router.get("/validate_token")
 async def validate_token_endpoint(token: str):
