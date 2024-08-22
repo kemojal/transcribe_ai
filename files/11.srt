@@ -1,0 +1,168 @@
+1
+00:00:00,000 --> 00:00:08,359
+ Hello, welcome to another exciting video. My name is Kimo Jello and in these tutorial series
+
+2
+00:00:08,359 --> 00:00:12,400
+ in this series we're going to be building south applications. I'm going to show you step
+
+3
+00:00:12,400 --> 00:00:20,400
+ by step on how to build south applications from scratch to production and it's going
+
+4
+00:00:20,400 --> 00:00:26,679
+ to be a very very interesting series. So the goal of this video it's going to be a very
+
+5
+00:00:26,679 --> 00:00:34,200
+ very interesting series. The goal of this series is to learn how to build south applications
+
+6
+00:00:34,200 --> 00:00:41,560
+ and I want to tell you out of biotagon. Now this is not a quick get-reward scheme because
+
+7
+00:00:41,560 --> 00:00:45,200
+ you know whatever it is that you want to do is going to take so much time it's going
+
+8
+00:00:45,200 --> 00:00:49,320
+ to require so much dedication and this also if it is something that you really want to
+
+9
+00:00:49,320 --> 00:00:53,840
+ do if south application building south application is something that you really want to do
+
+10
+00:00:53,840 --> 00:00:58,400
+ then it's going to take so much time it's going to take more than just one south applications,
+
+11
+00:00:58,400 --> 00:01:07,920
+ one south application to get to get money but it's you're going to get there with a lot of
+
+12
+00:01:07,920 --> 00:01:16,719
+ dedications and we're going to do this from all right the first thing when it comes to building
+
+13
+00:01:16,719 --> 00:01:22,640
+ a south application is to identify a problem you know what problem are you trying to solve now
+
+14
+00:01:22,799 --> 00:01:28,400
+ for the most part you know you need to you need to sit down and ask ourselves is this a problem
+
+15
+00:01:28,400 --> 00:01:34,400
+ that we have to solve we is this a problem that really needs solving and can it be solved using
+
+16
+00:01:34,400 --> 00:01:41,040
+ a software that's the first thing that we need to do and in this case what we are trying to solve
+
+17
+00:01:41,040 --> 00:01:48,719
+ basically is to you know allow content creators to upload audio or video and try and transcribe it
+
+18
+00:01:49,439 --> 00:01:55,120
+ and help them transcribe those videos and also generate chapters and also auto-report
+
+19
+00:01:55,120 --> 00:01:59,760
+ with these videos into different social media platforms so that's the south applications that
+
+20
+00:01:59,760 --> 00:02:06,319
+ we are building and that leads to the next part of this which is what are your target audience now
+
+21
+00:02:06,319 --> 00:02:12,639
+ for the most part for us our target audience in this first south application is content creators
+
+22
+00:02:12,639 --> 00:02:19,279
+ people who create content and podcasts who just want to transcribe their audience or videos
+
+23
+00:02:19,279 --> 00:02:27,039
+ and also generate different chapters and optimize their final product the next part of this is
+
+24
+00:02:27,039 --> 00:02:32,239
+ duration or how long is this south application going to take now the goal of this one is just to
+
+25
+00:02:32,239 --> 00:02:37,199
+ take two to three weeks to build because you know we are busy developers so we're going to try as
+
+26
+00:02:37,199 --> 00:02:43,919
+ much as possible to build something that we can finish within a timeframe of which in time
+
+27
+00:02:43,919 --> 00:02:49,199
+ three weeks timeframe so that's what we are going to be building how the next part is the
+
+28
+00:02:49,199 --> 00:02:54,719
+ tech stack tech stack is very very important when it comes to if your solo developer tech stack is
+
+29
+00:02:54,719 --> 00:03:00,479
+ one of the most important it's very very important because like knowing what tech stack to use is
+
+30
+00:03:00,560 --> 00:03:07,199
+ going to allow you is going to speed up your development process and you know in this case we are
+
+31
+00:03:07,199 --> 00:03:16,159
+ going to be using throughout this series we're going to be using fast API and next year's the reason
+
+32
+00:03:16,159 --> 00:03:24,399
+ why you ideally are used roast axon for most of the things that I do but one of the reasons why I
+
+33
+00:03:24,400 --> 00:03:31,360
+ switch to fast api is because it's easy and it's fast to build stuff so we're going to be
+
+34
+00:03:31,360 --> 00:03:37,360
+ using fast API to build all the APIs our backend services and in the front end we're going to be
+
+35
+00:03:37,360 --> 00:03:46,800
+ using next years to build the front end and the user interfaces all right and another thing also
+
+36
+00:03:46,800 --> 00:03:51,759
+ we're going to be using charge gpt i'm going to show you exactly how to use charge gpt as a
+
+37
+00:03:51,759 --> 00:03:57,519
+ supplement code editor to speed up the process and also throughout this series i'm going to show
+
+38
+00:03:57,519 --> 00:04:03,519
+ you the best practices how to build your own templates boilerplate templates that speed up your
+
+39
+00:04:03,519 --> 00:04:08,239
+ process so that you know in the next sas project that we are going to be building together we
+
+40
+00:04:08,239 --> 00:04:13,919
+ don't have to do all of these things that we are going to be doing in the first sas template so
+
+41
+00:04:13,919 --> 00:04:19,439
+ the first project is going to be very very slow it's going to be quite a long one but
+
+42
+00:04:19,439 --> 00:04:24,959
+ I'm at promise it's going to worth it so watch through all these
+

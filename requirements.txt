@@ -1,0 +1,19 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary>=2.9.9
+python-jose
+python-multipart
+alembic
+passlib
+cloudinary
+bcrypt
+python-dotenv
+python-multipart
+whisper
+# stable_whisper
+stable-ts
+openai-whisper
+pydub
+pyannote.audio 
+
