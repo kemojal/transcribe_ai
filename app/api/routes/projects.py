@@ -16,7 +16,7 @@ from app.db.database import get_db
 from app.utils.security import get_current_user
 # from app.utils.email import send_invitation_email
 
-from app.api.models.schemas import  ProjectResponse, ProjectCreate
+from app.api.models.schemas import  ProjectResponse,ProjectResponseLight, ProjectCreate
 from app.db.models import Project
 
 # from app.db.models import Transcription
@@ -53,6 +53,13 @@ def read_projects(skip: int = 0, limit: int = 10, db: Session = Depends(get_db),
     created_projects = db.query(Project).filter(Project.user_id == current_user.id).all()
     return created_projects
 
+
+@router.get("/light", response_model=List[ProjectResponseLight])
+def read_projects_light(skip: int = 0, limit: int = 10, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    created_projects = db.query(Project).filter(Project.user_id == current_user.id).all()
+    return created_projects
+
+
 # Get a specific project by ID
 @router.get("/{project_id}", response_model=ProjectResponse)
 def read_project(project_id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
@@ -61,6 +68,8 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: U
     if db_project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return db_project
+
+
 
 
 
@@ -91,6 +100,18 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     db.delete(db_project)
     db.commit()
     return {"message": "Project deleted successfully"}
+
+
+# @router.get("/recent", response_model=List[ProjectResponse])
+# def get_recent_projects(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+#     # Query to get the 4 most recently opened projects for the current user
+#     recent_projects = db.query(Project).filter(Project.user_id == current_user.id) \
+#         .order_by(Project.updated_at.desc()) \
+#         .limit(4) \
+#         .all()
+
+#     return recent_projects
+
 
 
 

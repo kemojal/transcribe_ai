@@ -51,6 +51,20 @@ class TranscriptionResponse(BaseModel):
     # original_filename: str
     transcription_text: Optional[str]
     language: Optional[str]
+    summary_text: Optional[str]
+    repurposed_text: Optional[str]
+    # user_id: int
+
+    class Config:
+        orm_mode = True
+
+class TranscriptionEditResponse(BaseModel):
+    id: int
+    # original_filename: str
+    transcription_text: Optional[str]
+    language: Optional[str]
+    summary_text: Optional[str]
+    repurposed_text: Optional[str]
     # user_id: int
 
     class Config:
@@ -74,6 +88,12 @@ class FileResponse(FileBase):
     class Config:
         orm_mode = True
 
+class FileUpdate(BaseModel):
+    name: str
+
+    class Config:
+        orm_mode = True
+
 
 
 class FileSchema(BaseModel):
@@ -93,6 +113,15 @@ class ProjectResponse(ProjectBase):
     updated_at: Optional[datetime]
     files: List[FileResponse] = []
     transcriptions: List[TranscriptionResponse] = []
+
+
+class ProjectResponseLight(ProjectBase):
+    id: int
+    user: UserBase
+    created_at: datetime
+    updated_at: Optional[datetime]
+    # files: List[FileResponse] = []
+    # transcriptions: List[TranscriptionResponse] = []
 
     class Config:
         orm_mode = True
@@ -212,3 +241,25 @@ class Card(CardBase):
 
 class CardList(BaseModel):
     cards: List[Card]
+
+
+
+
+# render video
+# Define Pydantic models for input data
+class Entry(BaseModel):
+    timestamp: str
+    content: str
+
+class TextStyle(BaseModel):
+    font_family: str
+    font_size: int
+    stroke: str = None
+    shadow: str = None
+    glow: str = None
+    color: str = None
+
+class RenderRequest(BaseModel):
+    entries: List[Entry]
+    text_style: TextStyle
+

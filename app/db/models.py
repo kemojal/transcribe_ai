@@ -71,6 +71,8 @@ class Transcription(Base):
     file_id = Column(Integer, ForeignKey('files.id'))
     transcription_text = Column(Text, nullable=True)
     language = Column(String(50))
+    summary_text = Column(Text, nullable=True)  # Summarized version
+    repurposed_text = Column(Text, nullable=True) # Repurposed content, e.g., video script, tweet, etc.
     # created_at = Column(TIMESTAMP, server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

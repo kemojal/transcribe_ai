@@ -33,6 +33,17 @@ def delete_file(db: Session, file_id: int):
     db.query(File).filter(File.id == file_id).delete()
     db.commit()
 
+
+def update_file_name(db: Session, file_id: int, new_name: str):
+    db_file = db.query(File).filter(File.id == file_id).first()
+    if db_file:
+        db_file.name = new_name
+        db.commit()
+        db.refresh(db_file)
+        return db_file
+    return None
+
+
 def create_transcription(db: Session, transcription: TranslationResponse, project_id: int, file_id: int):
     db_transcription = Transcription(text=transcription.text, project_id=project_id, file_id=file_id)
     db.add(db_transcription)
@@ -45,3 +56,7 @@ def get_transcriptions(db: Session, project_id: int):
 
 def get_transcription(db: Session, transcription_id: int):
     return db.query(Transcription).filter(Transcription.id == transcription_id).first()
+
+
+
+

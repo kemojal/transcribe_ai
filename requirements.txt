@@ -11,9 +11,15 @@ bcrypt
 python-dotenv
 python-multipart
 whisper
+
 # stable_whisper
 stable-ts
 openai-whisper
 pydub
 pyannote.audio 
-
+torchaudio
+moviepy
+pillow
+numpy
+google-generativeai
+torchvision

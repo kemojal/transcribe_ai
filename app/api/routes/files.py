@@ -14,7 +14,7 @@ load_dotenv()
 import cloudinary.uploader
 import cloudinary.api
 
-from app.api.models.schemas  import   FileResponse, FileSchema
+from app.api.models.schemas  import   FileResponse, FileSchema, FileUpdate
 
 from typing import List
 
@@ -116,6 +116,34 @@ def read_file(project_id: int, file_id: int, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=404, detail="File not found")
     
     return db_file
+
+
+
+@router.put("/files/{file_id}", response_model=FileResponse)
+def update_file(
+    project_id: int, 
+    file_id: int, 
+    file_update: FileUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: UserResponse = Depends(get_current_user)
+):
+    # Validate that the project exists and belongs to the current user
+    db_project = project_crud.get_project(db, project_id=project_id)
+    if db_project is None or db_project.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Validate that the file exists
+    db_file = project_crud.get_file(db, file_id=file_id)
+    if db_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Update the file name in the database
+    db_file.name = file_update.name
+    db.commit()
+    db.refresh(db_file)
+    
+    return db_file
+
 
 
 
