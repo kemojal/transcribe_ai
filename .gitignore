@@ -2,17 +2,51 @@ sample_audios
 files
 app/db/__pycache__/*
 
-# Virtual Environment - absolute and relative paths
-/myenv/
+# Virtual Environment
 myenv/
-**/myenv/**
-**/myenv/**/
-../myenv/
-.env
-__pycache__/
-*.pyc
-.DS_Store
+venv/
+env/
+.env/
+.venv/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local development
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
