@@ -109,19 +109,21 @@ class ProjectCreate(ProjectBase):
 class ProjectResponse(ProjectBase):
     id: int
     user: UserBase
+    is_archived: bool
     created_at: datetime
     updated_at: Optional[datetime]
     files: List[FileResponse] = []
     transcriptions: List[TranscriptionResponse] = []
 
+    class Config:
+        orm_mode = True
 
 class ProjectResponseLight(ProjectBase):
     id: int
     user: UserBase
+    is_archived: bool
     created_at: datetime
     updated_at: Optional[datetime]
-    # files: List[FileResponse] = []
-    # transcriptions: List[TranscriptionResponse] = []
 
     class Config:
         orm_mode = True
@@ -262,4 +264,3 @@ class TextStyle(BaseModel):
 class RenderRequest(BaseModel):
     entries: List[Entry]
     text_style: TextStyle
-

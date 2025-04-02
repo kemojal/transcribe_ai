@@ -1,5 +1,3 @@
-
-
 import whisper
 # from stable_whisper import timestamped_transcription
 import stable_whisper
@@ -49,14 +47,32 @@ def create_project(project: ProjectCreate, db: Session = Depends(get_db), curren
 
 # Get all projects for a user
 @router.get("/", response_model=List[ProjectResponse])
-def read_projects(skip: int = 0, limit: int = 10, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
-    created_projects = db.query(Project).filter(Project.user_id == current_user.id).all()
+def read_projects(
+    skip: int = 0, 
+    limit: int = 10, 
+    show_archived: bool = False,
+    db: Session = Depends(get_db), 
+    current_user: UserResponse = Depends(get_current_user)
+):
+    query = db.query(Project).filter(Project.user_id == current_user.id)
+    if not show_archived:
+        query = query.filter(Project.is_archived == False)
+    created_projects = query.offset(skip).limit(limit).all()
     return created_projects
 
 
 @router.get("/light", response_model=List[ProjectResponseLight])
-def read_projects_light(skip: int = 0, limit: int = 10, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
-    created_projects = db.query(Project).filter(Project.user_id == current_user.id).all()
+def read_projects_light(
+    skip: int = 0, 
+    limit: int = 10, 
+    show_archived: bool = False,
+    db: Session = Depends(get_db), 
+    current_user: UserResponse = Depends(get_current_user)
+):
+    query = db.query(Project).filter(Project.user_id == current_user.id)
+    if not show_archived:
+        query = query.filter(Project.is_archived == False)
+    created_projects = query.offset(skip).limit(limit).all()
     return created_projects
 
 
@@ -102,18 +118,33 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     return {"message": "Project deleted successfully"}
 
 
-# @router.get("/recent", response_model=List[ProjectResponse])
-# def get_recent_projects(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
-#     # Query to get the 4 most recently opened projects for the current user
-#     recent_projects = db.query(Project).filter(Project.user_id == current_user.id) \
-#         .order_by(Project.updated_at.desc()) \
-#         .limit(4) \
-#         .all()
+# Archive a project
+@router.put("/{project_id}/archive")
+def archive_project(project_id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if db_project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to archive this project")
+    
+    db_project.is_archived = True
+    db.commit()
+    db.refresh(db_project)
+    return {"message": "Project archived successfully"}
 
-#     return recent_projects
-
-
-
+# Unarchive a project
+@router.put("/{project_id}/unarchive")
+def unarchive_project(project_id: int, db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if db_project.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to unarchive this project")
+    
+    db_project.is_archived = False
+    db.commit()
+    db.refresh(db_project)
+    return {"message": "Project unarchived successfully"}
 
 # # Upload a file to a project
 # @router.post("/projects/{project_id}/files/", response_model=schemas.File)
@@ -150,3 +181,13 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
 #         raise HTTPException(status_code=404, detail="File not found")
     
 #     return db_file
+
+# # @router.get("/recent", response_model=List[ProjectResponse])
+# # def get_recent_projects(db: Session = Depends(get_db), current_user: UserResponse = Depends(get_current_user)):
+# #     # Query to get the 4 most recently opened projects for the current user
+# #     recent_projects = db.query(Project).filter(Project.user_id == current_user.id) \
+# #         .order_by(Project.updated_at.desc()) \
+# #         .limit(4) \
+# #         .all()
+
+# #     return recent_projects

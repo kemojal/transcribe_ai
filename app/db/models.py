@@ -16,7 +16,7 @@ class User(Base):
 
     connected_providers = relationship("ConnectedProvider", back_populates="user")
     cards = relationship("Card", back_populates="user")
-
+    projects = relationship("Project", back_populates="user")
 
 
 class ConnectedProvider(Base):
@@ -35,6 +35,7 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     user_id = Column(Integer, ForeignKey('users.id'))
+    is_archived = Column(Boolean, default=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -108,8 +109,6 @@ class Translation(Base):
     translated_text = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     subtitle = relationship("Subtitle")
-
-
 
 
 class Card(Base):
