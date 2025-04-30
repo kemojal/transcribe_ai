@@ -3,11 +3,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
 import time
+import os
+from dotenv import load_dotenv
 
-# Load database URL from environment variable
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:12345@localhost/transcribe_ai"
-# SQLALCHEMY_DATABASE_URL = "postgresql://ditally-db_owner:uJfZYwcIz6d5@ep-royal-wood-a1on9e6p.ap-southeast-1.aws.neon.tech/editube_db?sslmode=require"
+# Load environment variables
+load_dotenv()
 
+# Get database URL from environment variable or use default
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:12345@localhost:5433/transcribe_ai"
+)
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
