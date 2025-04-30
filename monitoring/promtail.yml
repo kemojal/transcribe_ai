@@ -17,10 +17,18 @@ scrape_configs:
           job: varlogs
           __path__: /var/log/*log
 
-  - job_name: application
+  - job_name: docker
     static_configs:
       - targets:
           - localhost
         labels:
-          job: applogs
-          __path__: /var/log/backup.log
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+
+  - job_name: transcribe_ai
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: transcribe_ai
+          __path__: /var/log/transcribe_ai/*.log
