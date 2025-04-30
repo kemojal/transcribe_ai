@@ -1,132 +1,148 @@
-# Transcribe AI
+# TranscribeAI
 
-A powerful FastAPI-based application for audio transcription, summarization, and analysis using state-of-the-art AI models.
+A FastAPI-based application for audio transcription and analysis, featuring real-time monitoring with Prometheus and Grafana.
 
 ## Features
 
-- **Audio Transcription**: Convert audio files to text using OpenAI's Whisper model
-- **Speaker Diarization**: Identify and separate different speakers in audio files
-- **Multi-language Support**: Transcribe and process audio in multiple languages
-- **AI-powered Summarization**: Generate concise summaries of transcriptions
-- **Caption Enhancement**: Improve and format captions for better readability
-- **Cloud Storage Integration**: Store and manage files using Cloudinary
-- **Database Management**: SQLAlchemy-based database for storing transcriptions and metadata
-- **RESTful API**: FastAPI-based endpoints for all transcription services
-- **WebSocket Support**: Real-time communication capabilities
+- Audio file transcription
+- Real-time monitoring and metrics
+- Automated database backups
+- Production-ready deployment configuration
+- Docker-based development and deployment
 
 ## Tech Stack
 
-- **Backend**: FastAPI, Python 3.12+
-- **Database**: SQLAlchemy, Alembic (for migrations)
-- **AI Models**:
-  - OpenAI Whisper (transcription)
-  - OpenAI GPT (summarization)
-  - Google Gemini (enhanced summarization)
-  - Pyannote (speaker diarization)
-- **File Storage**: Cloudinary
-- **Authentication**: JWT-based authentication
-- **WebSockets**: For real-time features
+- **Backend**: FastAPI, Python
+- **Database**: PostgreSQL
+- **Monitoring**: Prometheus, Grafana
+- **Containerization**: Docker, Docker Compose
+- **Deployment**: Coolify
 
 ## Prerequisites
 
-- Python 3.12 or higher
-- FFmpeg (for audio processing)
+- Docker
+- Docker Compose
+- Python 3.8+
 - Git
-- Virtual environment (recommended)
 
-## Installation
+## Development Setup
 
 1. Clone the repository:
 
-```bash
-git clone https://github.com/kemojal/transcribe_ai.git
-cd transcribe_ai
-```
+   ```bash
+   git clone https://github.com/yourusername/transcribe_ai.git
+   cd transcribe_ai
+   ```
 
 2. Create and activate a virtual environment:
 
-```bash
-python -m venv myenv
-source myenv/bin/activate  # On Windows: myenv\Scripts\activate
-```
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
 3. Install dependencies:
 
-```bash
-pip install -r requirements.txt
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 4. Set up environment variables:
-   Create a `.env` file in the root directory with the following variables:
+
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+5. Start the development environment:
+   ```bash
+   docker-compose up -d
+   ```
+
+## Development URLs
+
+- API: http://localhost:8002
+- API Documentation: http://localhost:8002/docs
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin)
+
+## Production Deployment
+
+### Using Coolify
+
+1. Push your code to a Git repository
+2. Create a new project in Coolify
+3. Connect your repository
+4. Configure deployment:
+   - Build Method: Docker Compose
+   - Docker Compose File: `docker-compose.prod.yml`
+   - Environment File: `.env.prod`
+
+### Environment Variables
+
+Required environment variables for production:
 
 ```env
-OPENAI_API_KEY=your_openai_api_key_here
-HF_TOKEN=your_huggingface_token_here
-GEMNI_API_KEY=your_gemini_api_key_here
-CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
-CLOUDINARY_API_KEY=your_cloudinary_api_key
-CLOUDINARY_API_SECRET=your_cloudinary_api_secret
-CLOUDINARY_URL=your_cloudinary_url
+POSTGRES_USER=your_db_user
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=transcribe_ai
+GRAFANA_PASSWORD=your_secure_grafana_password
+ENVIRONMENT=production
+ENABLE_METRICS=true
 ```
 
-## Running the Application
+## Monitoring
 
-1. Start the FastAPI server:
+The application includes comprehensive monitoring with Prometheus and Grafana:
 
-```bash
-uvicorn main:app --reload
-```
+### Prometheus Metrics
 
-2. Access the API documentation at:
+- Request duration
+- Request count
+- Request/response sizes
+- Success rates
+- Active requests
 
-```
-http://localhost:8000/docs
-```
+### Grafana Dashboard
 
-## API Endpoints
+Access the dashboard at `http://your-domain:3000` with:
 
-### Transcriptions
+- Username: admin
+- Password: (set in environment variables)
 
-- `POST /projects/{project_id}/files/{file_id}/transcriptions`: Create a new transcription
-- `GET /projects/{project_id}/files/{file_id}/transcriptions/{id}`: Get a specific transcription
-- `GET /projects/{project_id}/files/{file_id}/transcriptions`: List all transcriptions
-- `PUT /projects/{project_id}/files/{file_id}/transcriptions/{id}`: Update a transcription
-- `DELETE /projects/{project_id}/files/{file_id}/transcriptions/{id}`: Delete a transcription
+## Backup System
 
-### Additional Features
-
-- `POST /{id}/summarize-transcription`: Generate a summary of a transcription
-- `POST /{id}/enhance-captions`: Enhance and format captions
-- `POST /{id}/ask-chatgpt`: Ask questions about the transcription
-- `POST /{id}/generate-stylized-captions`: Generate captions in different styles
-- `POST /{id}/analyze-sentiment`: Analyze sentiment of the transcription
-- `POST /{id}/translate-transcription`: Translate transcription to another language
+Automated database backups are configured to run daily at 2 AM. Backups are stored in the `backup_data` volume.
 
 ## Project Structure
 
 ```
 transcribe_ai/
-├── app/
-│   ├── api/
-│   │   ├── routes/
-│   │   └── crud/
-│   ├── db/
-│   │   ├── models/
-│   │   └── database.py
-│   ├── utils/
-│   └── main.py
-├── alembic/
-├── tests/
-├── requirements.txt
-└── .env
+├── app/                    # Application code
+├── alembic/               # Database migrations
+├── monitoring/            # Monitoring configuration
+│   ├── prometheus.yml     # Prometheus configuration
+│   └── grafana/          # Grafana dashboards and provisioning
+├── scripts/              # Utility scripts
+│   └── backup_db.sh      # Database backup script
+├── tests/                # Test files
+├── .env                  # Development environment variables
+├── .env.prod            # Production environment variables
+├── docker-compose.yml    # Development Docker configuration
+├── docker-compose.prod.yml # Production Docker configuration
+├── Dockerfile           # Development Dockerfile
+├── Dockerfile.prod      # Production Dockerfile
+└── requirements.txt     # Python dependencies
 ```
 
-## Security Considerations
+## API Documentation
 
-- API keys and sensitive information are stored in environment variables
-- JWT-based authentication for API endpoints
-- Input validation and sanitization
-- Rate limiting and request validation
+The API documentation is available at `/docs` when running the application. It includes:
+
+- Available endpoints
+- Request/response schemas
+- Authentication requirements
+- Example requests
 
 ## Contributing
 
@@ -138,11 +154,8 @@ transcribe_ai/
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+[Your License Here]
 
-## Acknowledgments
+## Support
 
-- OpenAI for the Whisper model
-- Hugging Face for the Pyannote library
-- Google for the Gemini model
-- FastAPI team for the excellent framework
+For support, please open an issue in the repository or contact [your contact information].
