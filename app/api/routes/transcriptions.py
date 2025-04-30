@@ -41,35 +41,32 @@ import torchaudio
 
 load_dotenv()
 
-client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY")
-)
+# Initialize clients and models lazily
+def get_openai_client():
+    if not hasattr(get_openai_client, 'client'):
+        get_openai_client.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    return get_openai_client.client
 
-# print("GEMNI_API_KEY", os.environ["GEMNI_API_KEY"])
+def get_gemini_model():
+    if not hasattr(get_gemini_model, 'model'):
+        genai.configure(api_key=os.environ["GEMNI_API_KEY"])
+        get_gemini_model.model = genai.GenerativeModel("gemini-1.5-flash")
+    return get_gemini_model.model
 
-genai.configure(api_key=os.environ["GEMNI_API_KEY"])
-gemni_model = genai.GenerativeModel("gemini-1.5-flash")
-
-# huggingface pipeline for sentiment analysis
-# Initialize the pipeline at module level
-
-# print("HF_TOKEN ", os.environ["HF_TOKEN"])
-try:
-    # Make sure you have set the HF_TOKEN in your environment variables
-    HF_TOKEN = os.environ["HF_TOKEN"]
-    if not HF_TOKEN:
-        raise ValueError("HF_TOKEN environment variable not set")
-    
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
-        use_auth_token=True
-    )
-except Exception as e:
-    print(f"Error initializing pipeline: {str(e)}")
-    pipeline = None
-
-
-
+def get_diarization_pipeline():
+    if not hasattr(get_diarization_pipeline, 'pipeline'):
+        try:
+            HF_TOKEN = os.environ["HF_TOKEN"]
+            if not HF_TOKEN:
+                raise ValueError("HF_TOKEN environment variable not set")
+            get_diarization_pipeline.pipeline = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=True
+            )
+        except Exception as e:
+            print(f"Error initializing pipeline: {str(e)}")
+            get_diarization_pipeline.pipeline = None
+    return get_diarization_pipeline.pipeline
 
 logger = logging.getLogger(__name__)  # Define or import logger
 
@@ -384,7 +381,7 @@ def create_transcription(
     if transcription_text:
         # response = gemni_model.generate_content("summarize this transcription: " + transcription_text + "include some action items, outlines,  takeaways and suggestions")
         prompt = get_summary_prompt(transcription_language, transcription_text)
-        response = gemni_model.generate_content(prompt)
+        response = get_gemini_model().generate_content(prompt)
         summary_text = response.text
     else:
         summary_text = ''
@@ -640,7 +637,7 @@ async def summarize_transcription(
 
     try:
         # OpenAI Summarization using the new interface
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-3.5-turbo",  # Change this to the appropriate model you're using
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
@@ -664,7 +661,7 @@ async def enhance_captions(
 ):
     try:
         # OpenAI Caption Enhancement
-        response = openai.Completion.create(
+        response = get_openai_client().Completion.create(
             engine="text-davinci-003",
             prompt=f"Enhance the following captions:\n{request.subtitle_text}",
             max_tokens=150
