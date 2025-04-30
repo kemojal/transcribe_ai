@@ -35,6 +35,12 @@ services:
         condition: service_healthy
     ports:
       - "8002:8000"
+    labels:
+      - "traefik.http.routers.backend.rule=Host(`api.transcribai.kemojallow.com`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls=true"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
     restart: unless-stopped
     networks:
       - app_network
