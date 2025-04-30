@@ -114,10 +114,26 @@ services:
     image: grafana/promtail:latest
     container_name: transcribe_ai_promtail
     volumes:
-      - ./monitoring/promtail.yml:/etc/promtail/config.yml
       - /var/log:/var/log
       - transcribe_ai_logs:/var/log/transcribe_ai
-    command: -config.file=/etc/promtail/config.yml
+    command: >
+      -config.file=/etc/promtail/config.yml
+      -server.http-listen-port=9080
+      -server.grpc-listen-port=0
+      -positions.filename=/tmp/positions.yaml
+      -clients.url=http://loki:3100/loki/api/v1/push
+      -scrape_configs[0].job_name=system
+      -scrape_configs[0].static_configs[0].targets[0]=localhost
+      -scrape_configs[0].static_configs[0].labels.job=varlogs
+      -scrape_configs[0].static_configs[0].labels.__path__=/var/log/*log
+      -scrape_configs[1].job_name=docker
+      -scrape_configs[1].static_configs[0].targets[0]=localhost
+      -scrape_configs[1].static_configs[0].labels.job=docker
+      -scrape_configs[1].static_configs[0].labels.__path__=/var/lib/docker/containers/*/*.log
+      -scrape_configs[2].job_name=transcribe_ai
+      -scrape_configs[2].static_configs[0].targets[0]=localhost
+      -scrape_configs[2].static_configs[0].labels.job=transcribe_ai
+      -scrape_configs[2].static_configs[0].labels.__path__=/var/log/transcribe_ai/*.log
     networks:
       - app_network
 
