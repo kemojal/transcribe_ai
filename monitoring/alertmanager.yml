@@ -1,0 +1,43 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "smtp.gmail.com:587"
+  smtp_from: "kemo3855@gmail.com"
+  smtp_auth_username: "kemo3855@gmail.com"
+  smtp_auth_password: "bmhv cwln qigw vzhc"
+  smtp_require_tls: true
+
+route:
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "email-notifications"
+
+receivers:
+  - name: "email-notifications"
+    email_configs:
+      - to: "kemo3855@gmail.com"
+        send_resolved: true
+        html: |
+          <h2>{{ .Status | toUpper }}</h2>
+          {{ if eq .Status "firing" }}
+          <p><strong>Alert:</strong> {{ .CommonAnnotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+          <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+          {{ else }}
+          <p><strong>Resolved:</strong> {{ .CommonAnnotations.summary }}</p>
+          {{ end }}
+          <hr>
+          <h3>Details:</h3>
+          <ul>
+          {{ range .Alerts }}
+            <li>
+              <strong>Alert:</strong> {{ .Labels.alertname }}<br>
+              <strong>Status:</strong> {{ .Status }}<br>
+              <strong>Starts at:</strong> {{ .StartsAt }}<br>
+              {{ if .EndsAt }}
+              <strong>Ends at:</strong> {{ .EndsAt }}<br>
+              {{ end }}
+            </li>
+          {{ end }}
+          </ul>

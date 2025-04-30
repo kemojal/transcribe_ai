@@ -1,1 +1,143 @@
- 
+groups:
+  - name: transcribe_ai_alerts
+    rules:
+      # API Alerts
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s"
+
+      # Audio Processing Alerts
+      - alert: LargeAudioFile
+        expr: audio_file_size_bytes > 100000000
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large audio file detected"
+          description: "Audio file size is {{ $value | humanize }} bytes"
+
+      - alert: UnsupportedAudioFormat
+        expr: audio_format_errors_total > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unsupported audio format detected"
+          description: "Audio format error count is {{ $value }}"
+
+      - alert: HighAudioProcessingTime
+        expr: histogram_quantile(0.95, rate(audio_processing_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High audio processing time"
+          description: "95th percentile processing time is {{ $value }}s"
+
+      # Transcription Quality Alerts
+      - alert: LowTranscriptionConfidence
+        expr: avg(transcription_confidence_score) < 0.7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low transcription confidence"
+          description: "Average confidence score is {{ $value }}"
+
+      - alert: HighTranscriptionErrorRate
+        expr: rate(transcription_errors_total[5m]) / rate(transcription_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High transcription error rate"
+          description: "Transcription error rate is {{ $value | humanizePercentage }}"
+
+      # Transcription Service Alerts
+      - alert: HighTranscriptionFailureRate
+        expr: rate(transcription_failures_total[5m]) / rate(transcription_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High transcription failure rate"
+          description: "Transcription failure rate is {{ $value | humanizePercentage }}"
+
+      - alert: LongTranscriptionTime
+        expr: histogram_quantile(0.95, rate(transcription_duration_seconds_bucket[5m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Long transcription processing time"
+          description: "95th percentile transcription time is {{ $value }}s"
+
+      - alert: HighAudioProcessingQueue
+        expr: transcription_queue_size > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High audio processing queue"
+          description: "Audio processing queue size is {{ $value }}"
+
+      - alert: TranscriptionServiceDown
+        expr: up{job="transcription_service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Transcription service is down"
+          description: "Transcription service is not responding"
+
+      # Database Alerts
+      - alert: HighDatabaseConnections
+        expr: pg_stat_activity_count > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of database connections"
+          description: "Number of database connections is {{ $value }}"
+
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database is not responding"
+
+      # System Alerts
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes > 1.5e9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize }} bytes"

@@ -74,6 +74,20 @@ services:
       - app_network
     restart: unless-stopped
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: transcribe_ai_alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    networks:
+      - app_network
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:latest
     container_name: transcribe_ai_grafana

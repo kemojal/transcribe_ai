@@ -1,28 +1,33 @@
 services:
   db:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: transcribe_ai_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 12345
-      POSTGRES_DB: transcribe_ai
+      - POSTGRES_USER=transcribe_ai
+      - POSTGRES_PASSWORD=transcribe_ai
+      - POSTGRES_DB=transcribe_ai
     ports:
       - "5466:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U transcribe_ai"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app_network
 
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: transcribe_ai_backend
     ports:
       - "8002:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:12345@db:5432/transcribe_ai
+      - DATABASE_URL=postgresql://transcribe_ai:transcribe_ai@db:5432/transcribe_ai
+      - ENVIRONMENT=development
       - ENABLE_METRICS=true
     depends_on:
       db:
@@ -32,6 +37,8 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - app_network
 
   backup:
     build:
@@ -45,10 +52,12 @@ services:
     environment:
       - PGHOST=db
       - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=12345
+      - PGUSER=transcribe_ai
+      - PGPASSWORD=transcribe_ai
       - BACKUP_DIR=/backups
       - RETENTION_DAYS=7
+    networks:
+      - app_network
 
   prometheus:
     image: prom/prometheus:latest
@@ -64,16 +73,17 @@ services:
     ports:
       - "9090:9090"
     restart: unless-stopped
+    networks:
+      - app_network
 
   grafana:
     image: grafana/grafana:latest
     container_name: transcribe_ai_grafana
     volumes:
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
@@ -83,9 +93,15 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    networks:
+      - app_network
 
 volumes:
   postgres_data:
   backup_data:
   prometheus_data:
   grafana_data:
+
+networks:
+  app_network:
+    driver: bridge
