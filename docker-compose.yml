@@ -34,7 +34,6 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
-      - transcribe_ai_logs:/var/log/transcribe_ai
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
@@ -47,7 +46,6 @@ services:
       dockerfile: Dockerfile.backup
     volumes:
       - backup_data:/backups
-      - transcribe_ai_logs:/var/log/transcribe_ai
     depends_on:
       db:
         condition: service_healthy
@@ -115,7 +113,6 @@ services:
     container_name: transcribe_ai_promtail
     volumes:
       - /var/log:/var/log
-      - transcribe_ai_logs:/var/log/transcribe_ai
     command: >
       -config.file=/etc/promtail/config.yml
       -server.http-listen-port=9080
@@ -143,7 +140,6 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
-  transcribe_ai_logs:
 
 networks:
   app_network:
