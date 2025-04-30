@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 
 # from app.utils.helpers import create_text_clip
 from .api import api_router
@@ -12,7 +13,49 @@ from .api import api_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(title="TranscribeAI API")
+
+# Add Prometheus metrics with custom labels
+instrumentator = Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_respect_env_var=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=[".*admin.*", "/metrics"],
+    env_var_name="ENABLE_METRICS",
+    inprogress_name="inprogress",
+    inprogress_labels=True,
+)
+
+# Add custom metrics
+instrumentator.add(
+    metrics.request_size(
+        should_include_handler=True,
+        should_include_method=True,
+        should_include_status=True,
+        metric_namespace="transcribe_ai",
+        metric_subsystem="http",
+    )
+).add(
+    metrics.response_size(
+        should_include_handler=True,
+        should_include_method=True,
+        should_include_status=True,
+        metric_namespace="transcribe_ai",
+        metric_subsystem="http",
+    )
+).add(
+    metrics.latency(
+        should_include_handler=True,
+        should_include_method=True,
+        should_include_status=True,
+        metric_namespace="transcribe_ai",
+        metric_subsystem="http",
+    )
+)
+
+# Instrument the app
+instrumentator.instrument(app).expose(app)
 
 origins = [
     "http://localhost:3000",

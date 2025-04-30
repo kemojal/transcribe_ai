@@ -153,3 +153,4 @@ watchfiles==0.23.0
 websockets==12.0
 whisper==1.1.10
 yarl==1.9.4
+prometheus-fastapi-instrumentator==6.1.0
