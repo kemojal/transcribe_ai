@@ -28,6 +28,20 @@ jobs:
           pwd
           whoami
 
+          # Debug: Check if secrets are set (without revealing values)
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "SSH_PRIVATE_KEY is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "VPS_HOST is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "VPS_USER is not set"
+            exit 1
+          fi
+
           # Create .ssh directory
           mkdir -p /home/runner/.ssh
           chmod 700 /home/runner/.ssh
@@ -46,8 +60,14 @@ jobs:
           # Debug: Check known_hosts
           cat /home/runner/.ssh/known_hosts
 
-          # Test SSH connection with verbose output
-          ssh -v -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
+          # Debug: Check SSH key format
+          ssh-keygen -l -f /home/runner/.ssh/id_rsa || echo "Invalid SSH key format"
+
+          # Test SSH connection with verbose output and timeout
+          ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'" || {
+            echo "SSH connection failed"
+            exit 1
+          }
 
       - name: Deploy to VPS
         run: |
