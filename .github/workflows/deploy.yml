@@ -28,26 +28,23 @@ jobs:
           pwd
           whoami
 
-          # Create .ssh directory with explicit path
-          mkdir -p $HOME/.ssh
-          ls -la $HOME/.ssh
+          # Create .ssh directory
+          mkdir -p /home/runner/.ssh
+          chmod 700 /home/runner/.ssh
 
-          # Set permissions
-          chmod 700 $HOME/.ssh
+          # Write SSH key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /home/runner/.ssh/id_rsa
+          chmod 600 /home/runner/.ssh/id_rsa
 
-          # Write SSH key with explicit path
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > $HOME/.ssh/id_rsa
-          chmod 600 $HOME/.ssh/id_rsa
-
-          # Debug: Check if key was written (without showing content)
-          ls -la $HOME/.ssh/id_rsa
+          # Debug: Check if key was written
+          ls -la /home/runner/.ssh/
 
           # Add VPS to known hosts
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> $HOME/.ssh/known_hosts
-          chmod 644 $HOME/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> /home/runner/.ssh/known_hosts
+          chmod 644 /home/runner/.ssh/known_hosts
 
           # Debug: Check known_hosts
-          cat $HOME/.ssh/known_hosts
+          cat /home/runner/.ssh/known_hosts
 
           # Test SSH connection with verbose output
           ssh -v -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
