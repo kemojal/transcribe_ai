@@ -24,10 +24,20 @@ jobs:
 
       - name: Set up SSH
         run: |
+          # Create .ssh directory
           mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Write SSH key
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+
+          # Add VPS to known hosts
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+          # Test SSH connection
+          ssh -v ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
 
       - name: Deploy to VPS
         run: |
