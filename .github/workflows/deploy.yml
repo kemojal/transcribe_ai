@@ -1,8 +1,9 @@
-name: Deploy to VPS
+name: Deploy FastAPI to VPS
 
 on:
   push:
-    branches: [feature/docker_compose]
+    branches:
+      - feature/docker_compose
   workflow_dispatch:
 
 jobs:
@@ -10,12 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -23,63 +25,75 @@ jobs:
           pip install -r requirements.txt
 
       - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Debug SSH Setup
         run: |
-          # Debug: Print current directory and user
-          pwd
-          whoami
+          echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"
+          echo "SSH_AGENT_PID: $SSH_AGENT_PID"
+          ssh-add -l
+          echo "Testing SSH connection..."
+          ssh -v -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
 
-          # Debug: Check if secrets are set (without revealing values)
-          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
-            echo "SSH_PRIVATE_KEY is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.VPS_HOST }}" ]; then
-            echo "VPS_HOST is not set"
-            exit 1
-          fi
-          if [ -z "${{ secrets.VPS_USER }}" ]; then
-            echo "VPS_USER is not set"
-            exit 1
-          fi
-
-          # Create .ssh directory
-          mkdir -p /home/runner/.ssh
-          chmod 700 /home/runner/.ssh
-
-          # Write SSH key
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /home/runner/.ssh/id_rsa
-          chmod 600 /home/runner/.ssh/id_rsa
-
-          # Debug: Check if key was written
-          ls -la /home/runner/.ssh/
-
-          # Add VPS to known hosts
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> /home/runner/.ssh/known_hosts
-          chmod 644 /home/runner/.ssh/known_hosts
-
-          # Debug: Check known_hosts
-          cat /home/runner/.ssh/known_hosts
-
-          # Debug: Check SSH key format
-          ssh-keygen -l -f /home/runner/.ssh/id_rsa || echo "Invalid SSH key format"
-
-          # Test SSH connection with verbose output and timeout
-          ssh -v -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'" || {
-            echo "SSH connection failed"
-            exit 1
-          }
-
-      - name: Deploy to VPS
+      - name: Copy files to VPS
         run: |
-          # Create directory if it doesn't exist and clone repository
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /home/${{ secrets.VPS_USER }}/transcribe_ai"
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "if [ ! -d /home/${{ secrets.VPS_USER }}/transcribe_ai/.git ]; then cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git clone https://github.com/${{ github.repository }} .; fi"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/transcribe_ai || mkdir ~/transcribe_ai && cd ~/transcribe_ai
+            rm -rf ./*
+          EOF
+          scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai
 
-          # Pull latest changes on VPS
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git fetch origin && git checkout feature/docker_compose && git pull origin feature/docker_compose"
-
-          # Build and start Docker containers
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && docker-compose -f docker-compose.prod.yml up -d --build"
-
-          # Clean up old images
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "docker image prune -f"
+      - name: Deploy with Docker
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            cd ~/transcribe_ai
+            
+            # Stop and remove existing containers
+            docker-compose -f docker-compose.prod.yml down || true
+            
+            # Kill any process using port 8000
+            sudo fuser -k 8000/tcp || true
+            
+            # Enable and configure firewall
+            sudo ufw --force enable
+            sudo ufw allow 8000/tcp
+            sudo ufw allow 22/tcp
+            
+            # Build and start containers
+            docker-compose -f docker-compose.prod.yml up -d --build
+            
+            # Wait for containers to start
+            sleep 10
+            
+            # Print debugging information
+            echo "Container status:"
+            docker ps
+            echo "Container logs:"
+            docker-compose -f docker-compose.prod.yml logs
+            echo "Network information:"
+            netstat -tulpn | grep -E ':8000'
+            echo "Firewall status:"
+            sudo ufw status
+            
+            # Print the URLs
+            echo "Application is running on:"
+            echo "http://$(hostname -I | awk '{print $1}'):8000"
+            
+            # Test the connection locally with timeout
+            echo "Testing local connection..."
+            curl -v --connect-timeout 5 --max-time 10 http://localhost:8000/
+            
+            # Check container logs for any errors
+            echo "Checking container logs for errors..."
+            docker-compose -f docker-compose.prod.yml logs | grep -i error
+            
+            # Check if the containers are healthy
+            echo "Checking container health..."
+            docker ps --format "{{.Names}}: {{.Status}}"
+            
+            # Check if port is actually listening
+            echo "Checking if port is listening..."
+            sudo lsof -i :8000
+          EOF
