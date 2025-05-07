@@ -31,8 +31,12 @@ jobs:
 
       - name: Deploy to VPS
         run: |
+          # Create directory if it doesn't exist and clone repository
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p /home/${{ secrets.VPS_USER }}/transcribe_ai"
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "if [ ! -d /home/${{ secrets.VPS_USER }}/transcribe_ai/.git ]; then cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git clone https://github.com/${{ github.repository }} .; fi"
+
           # Pull latest changes on VPS
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git pull origin feature/docker_compose"
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git fetch origin && git checkout feature/docker_compose && git pull origin feature/docker_compose"
 
           # Build and start Docker containers
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && docker-compose -f docker-compose.prod.yml up -d --build"
