@@ -32,10 +32,10 @@ jobs:
       - name: Deploy to VPS
         run: |
           # Pull latest changes on VPS
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /path/to/your/app && git pull origin main"
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && git pull origin feature/docker_compose"
 
           # Build and start Docker containers
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /path/to/your/app && docker-compose -f docker-compose.prod.yml up -d --build"
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "cd /home/${{ secrets.VPS_USER }}/transcribe_ai && docker-compose -f docker-compose.prod.yml up -d --build"
 
           # Clean up old images
           ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "docker image prune -f"
