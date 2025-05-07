@@ -65,8 +65,9 @@ jobs:
             fi
 
             # Install Docker Compose if not installed
-            if ! command -v docker compose &> /dev/null; then
-              echo "Installing Docker Compose..."
+            # Note: We install docker-compose-plugin with docker above, this is a fallback/check
+            if ! docker compose version &> /dev/null; then 
+              echo "Docker Compose plugin not found or not working, attempting to ensure it is installed."
               sudo apt-get update
               sudo apt-get install -y docker-compose-plugin
             fi
@@ -74,12 +75,12 @@ jobs:
             # Stop and remove existing containers
             docker compose -f docker-compose.prod.yml down || true
             
-            # Kill any process using port 8000
-            sudo fuser -k 8000/tcp || true
+            # Kill any process using port 8025
+            sudo fuser -k 8025/tcp || true
             
             # Enable and configure firewall
             sudo ufw --force enable
-            sudo ufw allow 8000/tcp
+            sudo ufw allow 8025/tcp
             sudo ufw allow 22/tcp
             
             # Build and start containers
@@ -94,17 +95,17 @@ jobs:
             echo "Container logs:"
             docker compose -f docker-compose.prod.yml logs
             echo "Network information:"
-            netstat -tulpn | grep -E ':8000'
+            netstat -tulpn | grep -E ':8025'
             echo "Firewall status:"
             sudo ufw status
             
             # Print the URLs
             echo "Application is running on:"
-            echo "http://$(hostname -I | awk '{print $1}'):8000"
+            echo "http://$(hostname -I | awk '{print $1}'):8025"
             
             # Test the connection locally with timeout
             echo "Testing local connection..."
-            curl -v --connect-timeout 5 --max-time 10 http://localhost:8000/
+            curl -v --connect-timeout 5 --max-time 10 http://localhost:8025/
             
             # Check container logs for any errors
             echo "Checking container logs for errors..."
@@ -116,5 +117,5 @@ jobs:
             
             # Check if port is actually listening
             echo "Checking if port is listening..."
-            sudo lsof -i :8000
+            sudo lsof -i :8025
           EOF
