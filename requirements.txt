@@ -135,12 +135,12 @@ tabulate==0.9.0
 tensorboardX==2.6.2.2
 threadpoolctl==3.5.0
 tiktoken==0.7.0
-torch==2.4.0
+torch==2.1.0
 torch-audiomentations==0.11.1
 torch-pitch-shift==1.2.4
-torchaudio==2.4.0
+torchaudio==2.1.0
 torchmetrics==1.4.1
-torchvision==0.19.0
+torchvision==0.16.0
 tqdm==4.66.5
 typer==0.12.3
 typing_extensions==4.12.2
