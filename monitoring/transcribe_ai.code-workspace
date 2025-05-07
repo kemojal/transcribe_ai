@@ -1,0 +1,13 @@
+{
+  "folders": [
+	{
+		"path": ".."
+	},
+	{
+		"path": "../../transcribe/transcribe_frontend"
+	}
+],
+  "settings": {
+    "CodeGPT.apiKey": "CodeGPT Plus Beta"
+  }
+}
