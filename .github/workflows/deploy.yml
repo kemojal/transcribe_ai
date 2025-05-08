@@ -22,81 +22,16 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
 
-      - name: Modify Dockerfile to use scratch base
-        run: |
-          # Create a new Dockerfile that doesn't depend on Docker Hub
-          cat > Dockerfile.prod.new << EOF
-FROM scratch AS base
-
-# Create a custom base image with the necessary OS files
-ADD ubuntu-base-22.04-base-arm64.tar.gz /
-
-# Install required packages
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libsndfile1 \
-    ffmpeg \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    && ln -s /usr/bin/python3 /usr/bin/python \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
-WORKDIR /app
-
-# Create virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Copy the application code
-COPY app /app/app
-COPY alembic.ini /app/alembic.ini
-COPY migrations_fixed /app/migrations_fixed
-
-# Copy the database initialization script
-COPY app/init_db.py /app/app/init_db.py
-
-# Set the entrypoint
-COPY scripts/entrypoint.prod.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
-
-# Expose port
-EXPOSE 8000
-
-ENTRYPOINT ["/app/entrypoint.sh"]
-EOF
-          # Use the new Dockerfile
-          mv Dockerfile.prod.new Dockerfile.prod
-
-      - name: Modify docker-compose.prod.yml
-        run: |
-          # Remove version attribute
-          sed -i '/^version:/d' docker-compose.prod.yml
-          
-          # Add build context and dockerfile to API service
-          if grep -q "image:" docker-compose.prod.yml; then
-            sed -i 's/image: .*/build: ./' docker-compose.prod.yml
-          fi
-
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Check VPS architecture
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "uname -m"
 
       - name: Prepare VPS directory
         run: ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*"
@@ -144,24 +79,8 @@ EOF
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             echo 'Configuring firewall...'
             sudo ufw --force enable
-            sudo ufw allow 8025/tcp
+            sudo ufw allow 8002/tcp
             sudo ufw allow 22/tcp
-          "
-      
-      - name: Download Ubuntu base image
-        run: |
-          ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd ~/transcribe_ai
-            echo 'Downloading Ubuntu base image...'
-            wget -q http://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-base-arm64.tar.gz || {
-              echo 'Failed to download from Ubuntu. Trying alternative source...'
-              wget -q https://mirrors.edge.kernel.org/ubuntu-cdimage/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-base-arm64.tar.gz || {
-                echo 'Failed again. Trying HTTPS connections...'
-                curl -L -o ubuntu-base-22.04-base-arm64.tar.gz https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-base-arm64.tar.gz
-              }
-            }
-            ls -la
-            echo 'Ubuntu base image downloaded'
           "
 
       - name: Stop existing containers
@@ -169,21 +88,16 @@ EOF
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             docker compose -f docker-compose.prod.yml down || echo 'No containers to stop'
-            sudo fuser -k 8025/tcp || echo 'No processes using port 8025'
+            sudo fuser -k 8002/tcp || echo 'No processes using port 8002'
           "
 
-      - name: Build Docker containers without networking
+      - name: Build and start containers
         run: |
           ssh -o ConnectTimeout=300 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             export DOCKER_CLIENT_TIMEOUT=1200
             export COMPOSE_HTTP_TIMEOUT=1200
-            export DOCKER_BUILDKIT=0
-            export COMPOSE_DOCKER_CLI_BUILD=0
-            echo 'Building Docker containers without network dependencies...'
-            docker build --network=none -f Dockerfile.prod -t transcribe_ai_api:local .
-            # Manually update the docker-compose file to use local image
-            sed -i 's/build: ./image: transcribe_ai_api:local/' docker-compose.prod.yml
+            docker compose -f docker-compose.prod.yml up -d --build
           "
 
       - name: Run database initialization
@@ -191,15 +105,7 @@ EOF
           ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             echo 'Initializing database...'
-            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo 'Database initialization failed, continuing anyway'
-          "
-
-      - name: Start containers
-        run: |
-          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd ~/transcribe_ai
-            echo 'Starting containers...'
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml exec -T backend python -m app.init_db || echo 'Database initialization failed, continuing anyway'
           "
 
       - name: Check deployment status
@@ -210,12 +116,12 @@ EOF
             echo '===== CONTAINER STATUS ====='
             docker ps
             
-            echo '===== API LOGS ====='
-            docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo 'API container not found'
+            echo '===== BACKEND LOGS ====='
+            docker logs transcribe_ai_backend 2>&1 || echo 'Backend container not found'
             
             echo '===== APPLICATION URL ====='
-            echo \"http://\$(hostname -I | awk '{print \$1}'):8025\"
+            echo \"http://\$(hostname -I | awk '{print \$1}'):8002\"
             
             echo '===== CHECKING CONNECTION ====='
-            curl --connect-timeout 5 --max-time 10 http://localhost:8025/ || echo 'Connection failed'
+            curl --connect-timeout 5 --max-time 10 http://localhost:8002/ || echo 'Connection failed'
           "
