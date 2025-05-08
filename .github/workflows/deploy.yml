@@ -20,120 +20,89 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Modify Dockerfile
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # Replace Python image with Ubuntu
+          sed -i 's/FROM python:3.11-slim as builder/FROM ubuntu:22.04 as builder/' Dockerfile.prod
+          sed -i 's/FROM python:3.11-slim/FROM ubuntu:22.04/' Dockerfile.prod
+          
+          # Add Python installation commands
+          sed -i '/WORKDIR \/app/a RUN apt-get update && apt-get install -y python3.11 python3-pip python3-venv python3-dev && ln -s /usr/bin/python3 /usr/bin/python' Dockerfile.prod
 
       - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.7.0
+        uses: appleboy/ssh-action@master
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Debug SSH Setup
-        run: |
-          echo "SSH_AUTH_SOCK: $SSH_AUTH_SOCK"
-          echo "SSH_AGENT_PID: $SSH_AGENT_PID"
-          ssh-add -l
-          echo "Testing SSH connection..."
-          ssh -v -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
-
-      - name: Fix docker-compose.prod.yml file
-        run: |
-          # Remove version attribute
-          sed -i '/^version:/d' docker-compose.prod.yml
-          
-          # Modify Dockerfile.prod to use local build only
-          if [ -f "Dockerfile.prod" ]; then
-            # Replace the FROM statements with local build instructions
-            sed -i 's/FROM python:3.11-slim as builder/FROM ubuntu:latest as builder/' Dockerfile.prod
-            sed -i 's/FROM python:3.11-slim/FROM ubuntu:latest/' Dockerfile.prod
-            
-            # Add Python installation to the builder stage
-            sed -i '/WORKDIR \/app/a RUN apt-get update \&\& apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip \&\& ln -s /usr/bin/python3.11 /usr/bin/python \&\& ln -s /usr/bin/pip3 /usr/bin/pip' Dockerfile.prod
-          fi
-          
-          # Display the changes
-          echo "Updated Dockerfile.prod:"
-          cat Dockerfile.prod
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*
 
       - name: Copy files to VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*"
-          scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai/
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "*"
+          target: "~/transcribe_ai"
 
-      - name: Setup Docker on VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            # Install Docker if not installed
+      - name: Setup Docker
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Install Docker if needed
             if ! command -v docker &> /dev/null; then
-              echo 'Installing Docker...'
+              echo "Installing Docker..."
               sudo apt-get update
               sudo apt-get install -y ca-certificates curl gnupg
               sudo install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
               sudo chmod a+r /etc/apt/keyrings/docker.gpg
-              echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
               sudo apt-get update
               sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              sudo usermod -aG docker \$USER
+              sudo usermod -aG docker $USER
             fi
-
-            # Install Docker Compose if not installed
-            if ! docker compose version &> /dev/null; then 
-              echo 'Docker Compose plugin not found, installing...'
-              sudo apt-get update
-              sudo apt-get install -y docker-compose-plugin
-            fi
-          "
-
-      - name: Configure Docker on VPS
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            # Configure Docker to avoid Docker Hub
-            echo 'Configuring Docker...'
+            
+            # Configure Docker
             sudo mkdir -p /etc/docker
             echo '{
-              \"dns\": [\"8.8.8.8\", \"8.8.4.4\"],
-              \"max-concurrent-downloads\": 1,
-              \"max-concurrent-uploads\": 1,
-              \"registry-mirrors\": [\"https://mirror.gcr.io\"],
-              \"build-kit\": false
+              "dns": ["8.8.8.8", "8.8.4.4"],
+              "max-concurrent-downloads": 1,
+              "max-concurrent-uploads": 1,
+              "registry-mirrors": ["https://mirror.gcr.io"]
             }' | sudo tee /etc/docker/daemon.json
+            
+            # Restart Docker
+            sudo systemctl restart docker || true
 
-            # Restart Docker daemon
-            sudo systemctl restart docker
-          "
-
-      - name: Create Ubuntu Base Image
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            cd ~/transcribe_ai
-            # Create a minimal Ubuntu base image if needed
-            if ! docker image inspect ubuntu:latest > /dev/null 2>&1; then
-              echo 'Creating Ubuntu base image...'
-              cat > Dockerfile.base << 'EOD'
-FROM scratch
-ADD ubuntu-base-20.04-base-arm64.tar.gz /
-CMD [\"/bin/bash\"]
-EOD
-              
-              # Get Ubuntu base image and build
-              wget -q http://cdimage.ubuntu.com/ubuntu-base/releases/20.04/release/ubuntu-base-20.04-base-arm64.tar.gz
-              sudo docker build -t ubuntu:latest -f Dockerfile.base .
-              rm -f Dockerfile.base ubuntu-base-20.04-base-arm64.tar.gz
-            fi
-          "
-
-      - name: Deploy with Docker Compose
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+      - name: Build and Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             cd ~/transcribe_ai
             
-            # Set environment variables
+            # Configure build environment
             export DOCKER_CLIENT_TIMEOUT=300
             export COMPOSE_HTTP_TIMEOUT=300
-            export DOCKER_BUILDKIT=0
-            export COMPOSE_DOCKER_CLI_BUILD=0
+            
+            # Create Ubuntu base image if needed
+            if ! docker image inspect ubuntu:22.04 > /dev/null 2>&1; then
+              wget -q http://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz
+              echo 'FROM scratch
+            COPY ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz /
+            CMD ["/bin/bash"]' > Dockerfile.base
+              docker build -t ubuntu:22.04 -f Dockerfile.base .
+              rm -f Dockerfile.base ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz
+            fi
             
             # Configure firewall
             sudo ufw --force enable
@@ -142,48 +111,30 @@ EOD
             
             # Stop existing containers
             docker compose -f docker-compose.prod.yml down || true
-            
-            # Kill any process using port 8025
             sudo fuser -k 8025/tcp || true
             
-            # Build images
-            echo 'Building Docker images...'
-            docker compose -f docker-compose.prod.yml build --no-cache --network=host
-            
-            # Run database initialization
-            echo 'Running database initialization...'
-            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo 'Failed to run init_db script - continuing anyway'
-            
-            # Start containers
-            echo 'Starting containers...'
+            # Build and start containers
+            docker compose -f docker-compose.prod.yml build --no-cache
+            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo "DB init failed, continuing anyway"
             docker compose -f docker-compose.prod.yml up -d
-            
-            # Wait for containers to start
-            sleep 15
-          "
 
-      - name: Check Deployment Status
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+      - name: Check Deployment
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             cd ~/transcribe_ai
-            
-            # Check logs for the API container
-            echo '======== API CONTAINER LOGS ========'
-            docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo 'Could not find API container'
-            
-            # Check container status
-            echo 'Container status:'
+            sleep 15
+            echo "===== CONTAINER STATUS ====="
             docker ps
             
-            # Test the connection
-            echo 'Testing connection to port 8025:'
-            curl -v --connect-timeout 5 --max-time 10 http://localhost:8025/ || echo 'Connection failed'
+            echo "===== API LOGS ====="
+            docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo "API container not found"
             
-            # Check if port is listening
-            echo 'Checking port 8025:'
-            sudo lsof -i :8025 || echo 'No process is listening on port 8025'
+            echo "===== CHECKING PORT ====="
+            curl -v --connect-timeout 5 --max-time 10 http://localhost:8025/ || echo "Connection failed"
             
-            # Display application URL
-            echo 'Application should be running at:'
-            echo \"http://\$(hostname -I | awk '{print \$1}'):8025\"
-          "
+            echo "===== APPLICATION URL ====="
+            echo "http://$(hostname -I | awk '{print $1}'):8025"
