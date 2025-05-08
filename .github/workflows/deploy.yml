@@ -42,21 +42,21 @@ jobs:
           # Remove version attribute
           sed -i '/^version:/d' docker-compose.prod.yml
           
-          # Ensure correct port mapping for API service
-          # Note: This is a basic example, adjust according to your actual service name
-          # This assumes your API service is named "api"
-          if grep -q "api:" docker-compose.prod.yml; then
-            # Find the indentation level for the api service
-            INDENT=$(grep -n "api:" docker-compose.prod.yml | cut -d: -f1)
-            INDENT=$((INDENT + 1))
+          # Add DNS configuration to services
+          if grep -q "services:" docker-compose.prod.yml; then
+            # Find if the api service exists
+            if grep -q "api:" docker-compose.prod.yml; then
+              SERVICE_LINE=$(grep -n "api:" docker-compose.prod.yml | cut -d: -f1)
+              # Add dns entry with proper indentation
+              sed -i "${SERVICE_LINE}a\\    dns:\\n      - 8.8.8.8\\n      - 8.8.4.4" docker-compose.prod.yml
+            fi
             
-            # Check if ports section exists
-            if grep -A 10 "api:" docker-compose.prod.yml | grep -q "ports:"; then
-              # Update ports if they exist
-              sed -i '/api:/,/ports:/,/^[^ ]/ s/- ".*:.*"/- "8025:8000"/' docker-compose.prod.yml
-            else
-              # Add ports section if it doesn't exist
-              sed -i "${INDENT}i\\    ports:\\n      - \"8025:8000\"" docker-compose.prod.yml
+            # Add environment variables for Docker timeouts
+            if grep -q "environment:" docker-compose.prod.yml; then
+              ENV_LINE=$(grep -n "environment:" docker-compose.prod.yml | head -1 | cut -d: -f1)
+              INDENT=$(grep "environment:" docker-compose.prod.yml | head -1 | sed 's/environment:.*$//' | wc -c)
+              SPACES=$(printf "%${INDENT}s")
+              sed -i "${ENV_LINE}a\\${SPACES}  DOCKER_CLIENT_TIMEOUT: 120\\n${SPACES}  COMPOSE_HTTP_TIMEOUT: 120" docker-compose.prod.yml
             fi
           fi
           
@@ -71,6 +71,26 @@ jobs:
             rm -rf ./*
           EOF
           scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai
+
+      - name: Pre-pull Docker images
+        run: |
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            # Set DNS servers for Docker
+            sudo mkdir -p /etc/docker
+            echo '{
+              "dns": ["8.8.8.8", "8.8.4.4"]
+            }' | sudo tee /etc/docker/daemon.json
+            
+            # Restart Docker to apply DNS settings
+            sudo systemctl restart docker || echo "Failed to restart Docker, continuing anyway"
+            
+            # Pre-pull the Python image with timeout and retry
+            echo "Pre-pulling Python image..."
+            for i in {1..3}; do
+              echo "Attempt $i of 3..."
+              sudo docker pull python:3.11-slim && echo "Successfully pulled Python image" && break || echo "Pull failed, waiting before retry" && sleep 30
+            done
+          EOF
 
       - name: Install Docker and Deploy
         run: |
@@ -110,7 +130,16 @@ jobs:
             sudo ufw allow 8025/tcp
             sudo ufw allow 22/tcp
             
+            # Add Docker build and pull timeout environment variables
+            export DOCKER_CLIENT_TIMEOUT=300
+            export COMPOSE_HTTP_TIMEOUT=300
+            
+            # Try to run the database initialization script first
+            echo "Running database initialization script..."
+            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo "Failed to run init_db script - will continue anyway"
+            
             # Build and start containers
+            echo "Building and starting containers..."
             docker compose -f docker-compose.prod.yml up -d --build
             
             # Wait for containers to start
