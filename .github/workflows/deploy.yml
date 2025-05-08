@@ -37,6 +37,33 @@ jobs:
           echo "Testing SSH connection..."
           ssh -v -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "echo 'SSH connection successful'"
 
+      - name: Fix docker-compose.prod.yml file
+        run: |
+          # Remove version attribute
+          sed -i '/^version:/d' docker-compose.prod.yml
+          
+          # Ensure correct port mapping for API service
+          # Note: This is a basic example, adjust according to your actual service name
+          # This assumes your API service is named "api"
+          if grep -q "api:" docker-compose.prod.yml; then
+            # Find the indentation level for the api service
+            INDENT=$(grep -n "api:" docker-compose.prod.yml | cut -d: -f1)
+            INDENT=$((INDENT + 1))
+            
+            # Check if ports section exists
+            if grep -A 10 "api:" docker-compose.prod.yml | grep -q "ports:"; then
+              # Update ports if they exist
+              sed -i '/api:/,/ports:/,/^[^ ]/ s/- ".*:.*"/- "8025:8000"/' docker-compose.prod.yml
+            else
+              # Add ports section if it doesn't exist
+              sed -i "${INDENT}i\\    ports:\\n      - \"8025:8000\"" docker-compose.prod.yml
+            fi
+          fi
+          
+          # Display the changes
+          echo "Updated docker-compose.prod.yml:"
+          cat docker-compose.prod.yml
+
       - name: Copy files to VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
@@ -87,7 +114,12 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --build
             
             # Wait for containers to start
-            sleep 10
+            sleep 15
+            
+            # Check logs for the API container to diagnose issues
+            echo "======== API CONTAINER LOGS ========"
+            # Try different potential service names
+            docker logs aply-backend-api-1 2>&1 || docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo "Could not find API container"
             
             # Print debugging information
             echo "Container status:"
@@ -117,5 +149,13 @@ jobs:
             
             # Check if port is actually listening
             echo "Checking if port is listening..."
-            sudo lsof -i :8025
+            sudo lsof -i :8025 || echo "No process is listening on port 8025"
+            
+            # Additional troubleshooting
+            echo "Docker network information:"
+            docker network ls
+            
+            # Check if any container is using port 8025
+            echo "Containers with port 8025:"
+            docker ps -a | grep 8025
           EOF
