@@ -29,9 +29,16 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Check VPS architecture
+      - name: Check VPS status
         run: |
-          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "uname -m"
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'VPS Architecture:' && uname -m
+            echo 'OS Version:' && cat /etc/os-release | grep VERSION_ID
+            echo 'Docker Status:' && (sudo systemctl is-active docker || echo 'Docker not active')
+            echo 'Disk Space:' && df -h /
+            echo 'Memory:' && free -h
+            echo 'Network Status:' && ping -c 1 1.1.1.1 || echo 'Network connectivity issues'
+          "
 
       - name: Prepare VPS directory
         run: ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*"
@@ -47,67 +54,63 @@ jobs:
             echo 'Removed obsolete version attribute from docker-compose.prod.yml'
           "
 
-      - name: Reinstall Docker on VPS
-        run: |
-          ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            echo 'Removing existing Docker installation...'
-            sudo systemctl stop docker || true
-            sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo rm -rf /var/lib/docker /etc/docker
-            sudo rm -f /etc/apparmor.d/docker
-            sudo groupdel docker || true
-            
-            echo 'Installing Docker...'
-            sudo apt-get update
-            sudo apt-get install -y ca-certificates curl gnupg lsb-release
-            sudo install -m 0755 -d /etc/apt/keyrings
-            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-            sudo chmod a+r /etc/apt/keyrings/docker.asc
-            
-            echo 'deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable' | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            
-            sudo apt-get update
-            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            sudo systemctl enable docker
-            sudo systemctl start docker
-            sudo usermod -aG docker \$USER
-            
-            echo 'Docker installation status:'
-            sudo systemctl status docker || true
-          "
-
-      - name: Verify Docker installation
+      - name: Verify Docker is running
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            echo 'Checking Docker installation...'
-            sudo docker info || echo 'Docker not working properly'
-            sudo docker ps || echo 'Docker ps command failed'
+            if ! sudo systemctl is-active --quiet docker; then
+              echo 'Starting Docker service...'
+              sudo systemctl start docker
+              sleep 5
+            fi
+            
+            echo 'Docker service status:'
+            sudo systemctl status docker --no-pager || true
+            
+            echo 'Docker info:'
+            sudo docker info || echo 'Could not get Docker info'
           "
 
       - name: Setup Firewall
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             echo 'Configuring firewall...'
-            sudo ufw --force enable
-            sudo ufw allow 8002/tcp
-            sudo ufw allow 22/tcp
+            sudo ufw allow 8002/tcp || echo 'Failed to update firewall'
+            sudo ufw allow 22/tcp || echo 'Failed to update firewall'
+            sudo ufw status || echo 'Failed to check firewall status'
           "
 
       - name: Stop existing containers
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
-            sudo docker compose -f docker-compose.prod.yml down || echo 'No containers to stop'
-            sudo fuser -k 8002/tcp || echo 'No processes using port 8002'
+            sudo docker compose -f docker-compose.prod.yml down 2>/dev/null || echo 'No containers to stop'
+            sudo fuser -k 8002/tcp 2>/dev/null || echo 'No processes using port 8002'
           "
 
-      - name: Build and start containers
+      - name: Create Docker network
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'Creating app network if it doesn't exist...'
+            sudo docker network create app_network 2>/dev/null || echo 'Network may already exist'
+          "
+
+      - name: Start PostgreSQL container
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ~/transcribe_ai
+            echo 'Starting PostgreSQL container separately...'
+            sudo docker compose -f docker-compose.prod.yml up -d db
+            sleep 10
+          "
+      
+      - name: Build and start backend
         run: |
           ssh -o ConnectTimeout=300 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             export DOCKER_CLIENT_TIMEOUT=1200
             export COMPOSE_HTTP_TIMEOUT=1200
-            sudo docker compose -f docker-compose.prod.yml up -d --build
+            echo 'Building and starting backend container...'
+            sudo docker compose -f docker-compose.prod.yml up -d --build backend
           "
 
       - name: Run database initialization
@@ -128,6 +131,9 @@ jobs:
             
             echo '===== BACKEND LOGS ====='
             sudo docker logs transcribe_ai_backend 2>&1 || echo 'Backend container not found'
+            
+            echo '===== DATABASE LOGS ====='
+            sudo docker logs transcribe_ai_db 2>&1 || echo 'Database container not found'
             
             echo '===== APPLICATION URL ====='
             echo \"http://\$(hostname -I | awk '{print \$1}'):8002\"
