@@ -60,9 +60,21 @@ jobs:
             fi
           fi
           
+          # Modify Dockerfile.prod to use local build only (no Docker Hub)
+          if [ -f "Dockerfile.prod" ]; then
+            # Replace the FROM statements with local build instructions
+            sed -i 's/FROM python:3.11-slim as builder/FROM ubuntu:latest as builder/' Dockerfile.prod
+            sed -i 's/FROM python:3.11-slim/FROM ubuntu:latest/' Dockerfile.prod
+            
+            # Add Python installation to the builder stage
+            sed -i '/WORKDIR \/app/a RUN apt-get update \&\& apt-get install -y python3.11 python3.11-venv python3.11-dev python3-pip \&\& ln -s /usr/bin/python3.11 /usr/bin/python \&\& ln -s /usr/bin/pip3 /usr/bin/pip' Dockerfile.prod
+          fi
+          
           # Display the changes
           echo "Updated docker-compose.prod.yml:"
           cat docker-compose.prod.yml
+          echo "Updated Dockerfile.prod:"
+          cat Dockerfile.prod
 
       - name: Copy files to VPS
         run: |
@@ -71,26 +83,6 @@ jobs:
             rm -rf ./*
           EOF
           scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai
-
-      - name: Pre-pull Docker images
-        run: |
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            # Set DNS servers for Docker
-            sudo mkdir -p /etc/docker
-            echo '{
-              "dns": ["8.8.8.8", "8.8.4.4"]
-            }' | sudo tee /etc/docker/daemon.json
-            
-            # Restart Docker to apply DNS settings
-            sudo systemctl restart docker || echo "Failed to restart Docker, continuing anyway"
-            
-            # Pre-pull the Python image with timeout and retry
-            echo "Pre-pulling Python image..."
-            for i in {1..3}; do
-              echo "Attempt $i of 3..."
-              sudo docker pull python:3.11-slim && echo "Successfully pulled Python image" && break || echo "Pull failed, waiting before retry" && sleep 30
-            done
-          EOF
 
       - name: Install Docker and Deploy
         run: |
@@ -112,13 +104,44 @@ jobs:
             fi
 
             # Install Docker Compose if not installed
-            # Note: We install docker-compose-plugin with docker above, this is a fallback/check
             if ! docker compose version &> /dev/null; then 
               echo "Docker Compose plugin not found or not working, attempting to ensure it is installed."
               sudo apt-get update
               sudo apt-get install -y docker-compose-plugin
             fi
 
+            # Configure Docker to avoid Docker Hub
+            echo "Configuring Docker to avoid Docker Hub..."
+            sudo mkdir -p /etc/docker
+            echo '{
+              "dns": ["8.8.8.8", "8.8.4.4"],
+              "max-concurrent-downloads": 1,
+              "max-concurrent-uploads": 1,
+              "build-kit": false
+            }' | sudo tee /etc/docker/daemon.json
+            
+            # Create a minimal Ubuntu base image if needed
+            if ! docker image inspect ubuntu:latest > /dev/null 2>&1; then
+              echo "Attempting to pull ubuntu:latest once..."
+              if ! sudo docker pull ubuntu:latest; then
+                echo "Failed to pull ubuntu:latest, creating a minimal ubuntu base image..."
+                # Create base Dockerfile
+                cat > Dockerfile.base << EOF
+FROM scratch
+ADD ubuntu-base-20.04-base-arm64.tar.gz /
+CMD ["/bin/bash"]
+EOF
+                
+                # Get Ubuntu base image and build
+                wget -q http://cdimage.ubuntu.com/ubuntu-base/releases/20.04/release/ubuntu-base-20.04-base-arm64.tar.gz
+                sudo docker build -t ubuntu:latest -f Dockerfile.base .
+                rm -f Dockerfile.base ubuntu-base-20.04-base-arm64.tar.gz
+              fi
+            fi
+            
+            # Restart Docker daemon
+            sudo systemctl restart docker
+            
             # Stop and remove existing containers
             docker compose -f docker-compose.prod.yml down || true
             
@@ -133,14 +156,20 @@ jobs:
             # Add Docker build and pull timeout environment variables
             export DOCKER_CLIENT_TIMEOUT=300
             export COMPOSE_HTTP_TIMEOUT=300
+            export DOCKER_BUILDKIT=0
+            export COMPOSE_DOCKER_CLI_BUILD=0
             
-            # Try to run the database initialization script first
+            # Build the images with --no-cache and network=host to avoid Docker Hub
+            echo "Building Docker images..."
+            docker compose -f docker-compose.prod.yml build --no-cache --network=host
+            
+            # Try to run the database initialization script
             echo "Running database initialization script..."
             docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo "Failed to run init_db script - will continue anyway"
             
-            # Build and start containers
-            echo "Building and starting containers..."
-            docker compose -f docker-compose.prod.yml up -d --build
+            # Start containers
+            echo "Starting containers..."
+            docker compose -f docker-compose.prod.yml up -d
             
             # Wait for containers to start
             sleep 15
