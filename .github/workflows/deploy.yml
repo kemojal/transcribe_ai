@@ -31,110 +31,109 @@ jobs:
           # Add Python installation commands
           sed -i '/WORKDIR \/app/a RUN apt-get update && apt-get install -y python3.11 python3-pip python3-venv python3-dev && ln -s /usr/bin/python3 /usr/bin/python' Dockerfile.prod
 
-      - name: Set up SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Prepare VPS directory
+        run: ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "mkdir -p ~/transcribe_ai && rm -rf ~/transcribe_ai/*"
 
       - name: Copy files to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "*"
-          target: "~/transcribe_ai"
+        run: scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai/
 
-      - name: Setup Docker
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # Install Docker if needed
+      - name: Install Docker on VPS
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             if ! command -v docker &> /dev/null; then
-              echo "Installing Docker..."
+              echo 'Installing Docker...'
               sudo apt-get update
               sudo apt-get install -y ca-certificates curl gnupg
               sudo install -m 0755 -d /etc/apt/keyrings
               curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
               sudo chmod a+r /etc/apt/keyrings/docker.gpg
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+              echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
               sudo apt-get update
               sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              sudo usermod -aG docker $USER
+              sudo usermod -aG docker \$USER
+            else
+              echo 'Docker already installed'
             fi
-            
-            # Configure Docker
+          "
+
+      - name: Configure Docker
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'Configuring Docker...'
             sudo mkdir -p /etc/docker
             echo '{
-              "dns": ["8.8.8.8", "8.8.4.4"],
-              "max-concurrent-downloads": 1,
-              "max-concurrent-uploads": 1,
-              "registry-mirrors": ["https://mirror.gcr.io"]
+              \"dns\": [\"8.8.8.8\", \"8.8.4.4\"],
+              \"max-concurrent-downloads\": 1,
+              \"max-concurrent-uploads\": 1
             }' | sudo tee /etc/docker/daemon.json
             
-            # Restart Docker
-            sudo systemctl restart docker || true
+            sudo systemctl restart docker || echo 'Failed to restart Docker, continuing anyway'
+          "
 
-      - name: Build and Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/transcribe_ai
-            
-            # Configure build environment
-            export DOCKER_CLIENT_TIMEOUT=300
-            export COMPOSE_HTTP_TIMEOUT=300
-            
-            # Create Ubuntu base image if needed
-            if ! docker image inspect ubuntu:22.04 > /dev/null 2>&1; then
-              wget -q http://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz
-              echo 'FROM scratch
-            COPY ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz /
-            CMD ["/bin/bash"]' > Dockerfile.base
-              docker build -t ubuntu:22.04 -f Dockerfile.base .
-              rm -f Dockerfile.base ubuntu-22.04-minimal-cloudimg-amd64-root.tar.xz
-            fi
-            
-            # Configure firewall
+      - name: Setup Firewall
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'Configuring firewall...'
             sudo ufw --force enable
             sudo ufw allow 8025/tcp
             sudo ufw allow 22/tcp
-            
-            # Stop existing containers
-            docker compose -f docker-compose.prod.yml down || true
-            sudo fuser -k 8025/tcp || true
-            
-            # Build and start containers
-            docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo "DB init failed, continuing anyway"
-            docker compose -f docker-compose.prod.yml up -d
+          "
 
-      - name: Check Deployment
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
+      - name: Stop existing containers
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ~/transcribe_ai
+            docker compose -f docker-compose.prod.yml down || echo 'No containers to stop'
+            sudo fuser -k 8025/tcp || echo 'No processes using port 8025'
+          "
+
+      - name: Build Docker containers
+        run: |
+          ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ~/transcribe_ai
+            export DOCKER_CLIENT_TIMEOUT=600
+            export COMPOSE_HTTP_TIMEOUT=600
+            echo 'Building Docker containers...'
+            docker compose -f docker-compose.prod.yml build
+          "
+
+      - name: Run database initialization
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ~/transcribe_ai
+            echo 'Initializing database...'
+            docker compose -f docker-compose.prod.yml run --rm api python -m app.init_db || echo 'Database initialization failed, continuing anyway'
+          "
+
+      - name: Start containers
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            cd ~/transcribe_ai
+            echo 'Starting containers...'
+            docker compose -f docker-compose.prod.yml up -d
+          "
+
+      - name: Check deployment status
+        run: |
+          ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             sleep 15
-            echo "===== CONTAINER STATUS ====="
+            echo '===== CONTAINER STATUS ====='
             docker ps
             
-            echo "===== API LOGS ====="
-            docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo "API container not found"
+            echo '===== API LOGS ====='
+            docker logs transcribe_ai-api-1 2>&1 || docker logs api-1 2>&1 || echo 'API container not found'
             
-            echo "===== CHECKING PORT ====="
-            curl -v --connect-timeout 5 --max-time 10 http://localhost:8025/ || echo "Connection failed"
+            echo '===== APPLICATION URL ====='
+            echo \"http://\$(hostname -I | awk '{print \$1}'):8025\"
             
-            echo "===== APPLICATION URL ====="
-            echo "http://$(hostname -I | awk '{print $1}'):8025"
+            echo '===== CHECKING CONNECTION ====='
+            curl --connect-timeout 5 --max-time 10 http://localhost:8025/ || echo 'Connection failed'
+          "
