@@ -39,39 +39,49 @@ jobs:
       - name: Copy files to VPS
         run: scp -r ./* ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/transcribe_ai/
 
-      - name: Install Docker on VPS
+      - name: Fix docker-compose version issue
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            if ! command -v docker &> /dev/null; then
-              echo 'Installing Docker...'
-              sudo apt-get update
-              sudo apt-get install -y ca-certificates curl gnupg
-              sudo install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-              sudo chmod a+r /etc/apt/keyrings/docker.gpg
-              echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-              sudo apt-get update
-              sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-              sudo usermod -aG docker \$USER
-            else
-              echo 'Docker already installed'
-            fi
+            cd ~/transcribe_ai
+            sed -i '/^version:/d' docker-compose.prod.yml
+            echo 'Removed obsolete version attribute from docker-compose.prod.yml'
           "
 
-      - name: Configure Docker
+      - name: Reinstall Docker on VPS
+        run: |
+          ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
+            echo 'Removing existing Docker installation...'
+            sudo systemctl stop docker || true
+            sudo apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            sudo rm -rf /var/lib/docker /etc/docker
+            sudo rm -f /etc/apparmor.d/docker
+            sudo groupdel docker || true
+            
+            echo 'Installing Docker...'
+            sudo apt-get update
+            sudo apt-get install -y ca-certificates curl gnupg lsb-release
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            
+            echo 'deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable' | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            sudo systemctl enable docker
+            sudo systemctl start docker
+            sudo usermod -aG docker \$USER
+            
+            echo 'Docker installation status:'
+            sudo systemctl status docker || true
+          "
+
+      - name: Verify Docker installation
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
-            echo 'Configuring Docker...'
-            sudo mkdir -p /etc/docker
-            echo '{
-              \"dns\": [\"8.8.8.8\", \"8.8.4.4\"],
-              \"max-concurrent-downloads\": 1,
-              \"max-concurrent-uploads\": 1,
-              \"registry-mirrors\": [],
-              \"allow-nondistributable-artifacts\": true
-            }' | sudo tee /etc/docker/daemon.json
-            
-            sudo systemctl restart docker || echo 'Failed to restart Docker, continuing anyway'
+            echo 'Checking Docker installation...'
+            sudo docker info || echo 'Docker not working properly'
+            sudo docker ps || echo 'Docker ps command failed'
           "
 
       - name: Setup Firewall
@@ -87,7 +97,7 @@ jobs:
         run: |
           ssh -o ConnectTimeout=30 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
-            docker compose -f docker-compose.prod.yml down || echo 'No containers to stop'
+            sudo docker compose -f docker-compose.prod.yml down || echo 'No containers to stop'
             sudo fuser -k 8002/tcp || echo 'No processes using port 8002'
           "
 
@@ -97,7 +107,7 @@ jobs:
             cd ~/transcribe_ai
             export DOCKER_CLIENT_TIMEOUT=1200
             export COMPOSE_HTTP_TIMEOUT=1200
-            docker compose -f docker-compose.prod.yml up -d --build
+            sudo docker compose -f docker-compose.prod.yml up -d --build
           "
 
       - name: Run database initialization
@@ -105,7 +115,7 @@ jobs:
           ssh -o ConnectTimeout=60 ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "
             cd ~/transcribe_ai
             echo 'Initializing database...'
-            docker compose -f docker-compose.prod.yml exec -T backend python -m app.init_db || echo 'Database initialization failed, continuing anyway'
+            sudo docker compose -f docker-compose.prod.yml exec -T backend python -m app.init_db || echo 'Database initialization failed, continuing anyway'
           "
 
       - name: Check deployment status
@@ -114,10 +124,10 @@ jobs:
             cd ~/transcribe_ai
             sleep 15
             echo '===== CONTAINER STATUS ====='
-            docker ps
+            sudo docker ps
             
             echo '===== BACKEND LOGS ====='
-            docker logs transcribe_ai_backend 2>&1 || echo 'Backend container not found'
+            sudo docker logs transcribe_ai_backend 2>&1 || echo 'Backend container not found'
             
             echo '===== APPLICATION URL ====='
             echo \"http://\$(hostname -I | awk '{print \$1}'):8002\"
